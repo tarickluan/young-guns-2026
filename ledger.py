@@ -78,6 +78,11 @@ class CreditLedger:
         account_id: str,
         amount_cents: int,
     ) -> CreditResult:
+        # Validação antes de abrir a transação: um evento inválido não pode
+        # gravar nada. Assim o saldo não muda e o event_id recusado continua
+        # livre para uma tentativa válida depois.
+        self._validate(event_id, account_id, amount_cents)
+
         with self._transaction() as conn:
             try:
                 conn.execute(
@@ -112,6 +117,18 @@ class CreditLedger:
             return self._balance_in(conn, account_id)
         finally:
             conn.close()
+
+    @staticmethod
+    def _validate(event_id: str, account_id: str, amount_cents: int) -> None:
+        if not event_id:
+            raise InvalidCreditError("event_id nao pode ser vazio")
+        if not account_id:
+            raise InvalidCreditError("account_id nao pode ser vazio")
+        # bool e subclasse de int; True/False nao sao valores de credito validos.
+        if isinstance(amount_cents, bool) or not isinstance(amount_cents, int):
+            raise InvalidCreditError("amount_cents deve ser um inteiro")
+        if amount_cents <= 0:
+            raise InvalidCreditError("amount_cents deve ser maior que zero")
 
     @staticmethod
     def _balance_in(conn: sqlite3.Connection, account_id: str) -> int:
